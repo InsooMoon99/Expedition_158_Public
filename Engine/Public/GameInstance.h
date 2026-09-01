@@ -1,0 +1,865 @@
+﻿#pragma once
+
+#pragma region INCLUDE
+
+#include <string_view>
+#include <utility>
+#include "Base.h"
+#include "Debug_Types.h"
+#include "DelegateHub.h"
+#include "Engine_Constants.h"
+#include "Input_Manager.h"
+#include "Log_Define.h"
+#include "Prototype_Manager.h"
+#include "ScreenFx_Manager.h"
+#include "Shadow.h"
+#include "TypeRegistry.h"
+#ifdef _DEBUG
+#include "Print_Manager.h"
+#endif
+
+#pragma endregion
+
+#pragma region FD
+NS_BEGIN(Engine)
+
+struct ShadowCascadeInfluenceVolume;
+class Event_Bus;
+struct RenderViewHotspotSnapshot;
+class Event_Bus;
+class Graphic_Device;
+struct ShadowCascadeDebugInfo;
+struct ShadowCascadeInfluenceVolume;
+class Timer_Manager;
+class Level_Manager;
+class Prototype_Manager;
+class UI_Manager;
+class Object_Manager;
+class Renderer;
+class PipeLine;
+class Light_Manager;
+class Font_Manager;
+class Asset_Manager;
+class Sound_Manager;
+class Log_Manager;
+class Target_Manager;
+class Camera_Manager;
+class Environment_Manager;
+struct ConsoleLogEntry;
+class Component;
+class GameObject;
+class UI_Base;
+class Level;
+class Camera;
+class Debug_Manager;
+class Collision_Manager;
+class PhysX_Manager;
+class ColliderCom;
+class Shadow;
+class Picking;
+class Culling_Manager;
+class ThreadPool;
+class PostProcessPipeline;
+class LightingPipeline;
+class ScreenFx_Manager;
+class ShaderCom_Controller;
+class ShaderResourceRegistry;
+struct StaticCollisionData;
+class ScreenFx_Instance;
+struct DOFPreset;
+struct DOFTransitionDesc;
+struct ShadowCascadeInfluenceVolume;
+NS_END
+#pragma endregion
+
+NS_BEGIN(Engine)
+
+enum class Collision_Preset;
+
+struct PhysXStaticActorHandle;
+struct PhysXQueryHit;
+struct ShadowCascadeInfluenceVolume;
+
+struct DebugResourceMemorySummary
+{
+    uint32 texturePrototypeCount{};
+    uint32 textureSrvCount{};
+    size_t textureEstimatedBytes{};
+
+    uint32 modelPrototypeCount{};
+    uint32 modelMeshCount{};
+    uint32 modelMaterialCount{};
+    uint32 modelBoneCount{};
+    uint32 modelAnimationCount{};
+    size_t modelEstimatedBytes{};
+
+    uint32 standaloneBufferPrototypeCount{};
+    size_t standaloneBufferEstimatedBytes{};
+
+    uint32 currentLevelObjectCount{};
+    uint32 currentLevelComponentCount{};
+};
+
+class ENGINE_DLL GameInstance final : public Base
+{
+    DECLARE_SINGLETON(GameInstance)
+
+public:
+    GameInstance();
+    ~GameInstance() override;
+
+public:
+    HRESULT Initialize_Engine(const ENGINE_DESC& engineDesc, ComPtr<Device>& device, ComPtr<Context>& context);
+
+    void Update_Engine(float timeDelta);
+    void Update_Engine(float timeDelta, const function<void(float)>& clientUpdate);
+
+    HRESULT Draw();
+    HRESULT Draw_RendererOnly(bool renderPreviewScreenFx = false, bool preservePostProcess = false);
+    void Clear_RenderGroups();
+    void Backup_RenderGroup();
+    void Restore_RenderGroup();
+
+    void Clear_Resources(uint32 levelIndex, bool clearPrototypes = true);
+
+    float Random(float min, float max);
+
+    ComPtr<Device> Get_Device() const { return _device; }
+    ComPtr<Context> Get_Context() const { return _context; }
+
+public:
+    void Set_GameplayPaused(bool paused) { _isGameplayPaused = paused; }
+    bool Is_GameplayPaused() const { return _isGameplayPaused; }
+    bool Is_EditorRuntimeDebugEnabled() const { return _enableEditorRuntimeDebug; }
+
+    void Set_WorldTimeScale(float timeScale);
+    void Slow_WorldTime(float timeScale, float duration);
+    void Stop_WorldTimeSlow();
+
+    float Get_WorldTimeScale() const { return _worldTimeScale; }
+    float Get_WorldTimeScaleRestoreBase() const { return _isWorldTimeSlowActive ? _worldTimeScaleBeforeSlow : _worldTimeScale; }
+    float Get_UnscaledTimeDelta() const { return _unscaledTimeDelta; }
+    float Get_WorldTimeDelta() const { return _worldTimeDelta; }
+    bool Get_LastRuntimeFramePerfSnapshot(RuntimeFramePerfSnapshot& outSnapshot) const;
+
+public: /* For.Log_Manager */
+    void Log_FileOnly(const spdlog::source_loc& sourceLoc, spdlog::level::level_enum level, const string& message) const;
+    void Visit_ConsoleLogs(const function<void(const ConsoleLogEntry& logEntry)>& visitor) const;
+    void Clear_ConsoleLogs();
+
+    uint32 Get_ConsoleLogCount() const;
+    uint32 Get_ConsoleLogCapacity() const;
+    void Set_ConsoleLogCapacity(uint32 capacity);
+    uint32 Get_ConsoleLogRevision() const;
+
+public: /* For.Graphic_Device */
+    HRESULT Clear_Buffers(const Vec4& clearColor);
+    HRESULT Present();
+
+    void Bind_BackBuffer();
+    HRESULT Resize_BackBuffer(uint32 width, uint32 height);
+
+    ComPtr<SwapChain> Get_SwapChain() const;
+
+public: /* For.Viewport */
+    void Set_ViewportSize(uint32 width, uint32 height);
+    HRESULT Apply_LogicalViewportSize(uint32 width, uint32 height);
+    uint32 Get_ViewportWidth() const;
+    uint32 Get_ViewportHeight() const;
+
+    uint32 Get_BackBufferWidth() const;
+    uint32 Get_BackBufferHeight() const;
+
+public: /* For.Timer_Manager */
+    HRESULT Add_Timer(const wstring& timerTag);
+    float Compute_TimeDelta(const wstring& timerTag);
+
+public: /* For.Level_Manager */
+    HRESULT Change_Level(uint32 newLevelIndex, const Shared<Level>& newLevel, bool clearPreviousLevelPrototypes = true);
+
+    uint32 Current_LevelIndex() const;
+    Shared<Level> Current_LevelType() const;
+
+public: /* For.Prototype_Manager */
+    HRESULT Add_Prototype(uint32 levelIndex, const wstring& prototypeTag, const Shared<Base>& prototype);
+    Shared<Base> Clone_Prototype(Prototype prototype, uint32 levelIndex, const wstring& prototypeTag, void* arg = nullptr);
+
+    bool Has_Prototype(uint32 levelIndex, const wstring& prototypeTag) const;
+
+public: /* For.UI_Manager */
+    HRESULT Add_UI(
+        uint32 prototypeLevelIndex,
+        const wstring& prototypeTag,
+        void* arg = nullptr,
+        Shared<UI_Base>* outUI = nullptr);
+    bool Remove_UI(const Shared<UI_Base>& ui);
+
+    void Pop_UI();
+
+public: /* For.Object_Manager */
+    HRESULT Add_GameObject(
+        uint32 prototypeLevelIndex,
+        const wstring& prototypeTag,
+        uint32 layerLevelIndex,
+        const wstring& layerTag,
+        void* arg = nullptr);
+
+    HRESULT Add_GameObject(
+        uint32 prototypeLevelIndex,
+        const wstring& prototypeTag,
+        uint32 layerLevelIndex,
+        const wstring& layerTag,
+        Shared<GameObject>& outGameObject,
+        void* arg = nullptr);
+
+    HRESULT Add_GameObject(
+        uint32 layerLevelIndex,
+        const wstring& layerTag,
+        const Shared<GameObject>& gameObject);
+
+    bool Remove_GameObject(uint32 levelIndex, const Shared<GameObject>& gameObject);
+    void Flush_RemovedGameObjects();
+    HRESULT Clear_LevelObjects(uint32 levelIndex);
+
+    Shared<GameObject> Find_FirstObject(uint32 levelIndex, const wstring& layerTag);
+
+    void Visit_LevelObjects(
+        uint32 levelIndex,
+        const function<void(const wstring& layerTag, const Shared<GameObject>& gameObject)>& visitor) const;
+
+    void Visit_CurrentLevelObjects(
+        const function<void(const wstring& layerTag, const Shared<GameObject>& gameObject)>& visitor) const;
+
+    uint64 Get_CurrentLevelObjectRevision() const;
+
+public: /* For.Renderer */
+    void Add_RenderGroup(RenderGroup renderGroup, const Shared<GameObject>& gameObject);
+    uint32 Get_RenderCall() const;
+    bool Try_GetRenderViewHotspotSnapshot(RenderViewHotspotSnapshot& outSnapshot) const;
+    void Set_RenderViewHotspotCaptureEnabled(bool enabled);
+    bool Is_RenderViewHotspotCaptureEnabled() const;
+    Shared<PostProcessPipeline> Get_PostProcessPipeline() const;
+    Shared<PostProcessPipeline> Get_PostProcessPipeline();
+    HRESULT Begin_DOFOverrideScope(const string& ownerTag);
+    HRESULT Set_DOFOverridePreset(const string& ownerTag, const DOFPreset& preset, const DOFTransitionDesc& transition);
+    HRESULT Set_DOFOverrideFocus(const string& ownerTag, float focusDistance, float focusRange);
+    HRESULT Clear_DOFOverrideToBaseline(const string& ownerTag, const DOFTransitionDesc& transition);
+    HRESULT End_DOFOverrideScope(const string& ownerTag, const DOFTransitionDesc& transition);
+    Shared<LightingPipeline> Get_LightingPipeline() const;
+    Shared<LightingPipeline> Get_LightingPipeline();
+    HRESULT Reload_RendererShaders();
+    HRESULT Reload_LightingPipelineShaders();
+    HRESULT Reload_ShaderComs();
+    ScreenFx_Manager* Get_ScreenFxManager();
+    ShaderCom_Controller* Get_ShaderComController();
+    void Request_ScreenCapture(bool saveToFile = false);
+    RenderGroup Get_CurrentRenderGroup() const;
+    const FogZoneCB& Get_FogZones() const;
+    const VolumetricLightShaftZoneCB& Get_VolumetricLightShaftZones() const;
+    HRESULT Change_IBL(const wchar_t* irradiancePath, const wchar_t* prefilterPath);
+    HRESULT Bind_IBLTextures(const Shared<ShaderCom>& shader) const;
+    void Begin_SoulLikeIBLOverride();
+    void End_SoulLikeIBLOverride();
+    FogZoneCB Build_ActiveFogZones(const Vec3& cameraPosition);
+    VolumetricLightShaftZoneCB Build_ActiveVolumetricLightShaftZones(const Vec3& cameraPosition);
+    void Set_FogZones(const FogZoneCB& fogZoneCB);
+    void Set_VolumetricLightShaftZones(const VolumetricLightShaftZoneCB& lightShaftZoneCB);
+    void Set_FogZoneCullingEnabled(bool enabled);
+    bool Is_FogZoneCullingEnabled() const;
+    void Set_FogZoneCullingDistance(float distance);
+    float Get_FogZoneCullingDistance() const;
+    void Set_VolumetricLightShaftZoneCullingEnabled(bool enabled);
+    bool Is_VolumetricLightShaftZoneCullingEnabled() const;
+    void Set_VolumetricLightShaftZoneCullingDistance(float distance);
+    float Get_VolumetricLightShaftZoneCullingDistance() const;
+    const vector<uint32>& Get_ActiveFogAABBZoneIndices() const;
+    const vector<uint32>& Get_ActiveFogOBBZoneIndices() const;
+    const vector<uint32>& Get_ActiveVolumetricLightShaftZoneIndices() const;
+    void Set_RenderEnvironment(bool enabled);
+    bool Is_RenderEnvironment() const;
+    void Set_LetterboxEnabled(bool setLetterboxEnabled = true);
+    void Set_PreviewLetterboxEnabled(bool enabled);
+
+public: /* For.PipeLine */
+    HRESULT Bind_CamPosition(ShaderCom* shader, const char* constantName);
+    HRESULT Bind_TransformMatrix(D3DTS transformState, ShaderCom* shader, const char* constantName);
+    HRESULT Bind_TransformMatrix_Inverse(D3DTS transformState, ShaderCom* shader, const char* constantName);
+
+    const Matrix* Get_Transform(D3DTS transformState) const;
+    const Matrix* Get_Transform_Inverse(D3DTS transformState) const;
+    const Vec4* Get_CamPosition() const;
+
+    void Set_Transform(D3DTS transformState, FXMMATRIX& transformStateMatrix);
+
+    HRESULT Bind_CameraCB(const Shared<ShaderCom>& shader) const;
+
+public: /* For.Input_Manager */
+    bool KeyPress(KEY_TYPE key) const;
+    bool KeyDown(KEY_TYPE key) const;
+    bool KeyUp(KEY_TYPE key) const;
+
+    Vec2 Get_MouseDelta() const;
+    float Get_MouseWheel() const;
+    void Set_MouseWheel(float mouseWheel);
+    void Lock_Mouse();
+    void Unlock_Mouse();
+    bool Is_MouseLocked() const;
+
+    void Begin_EditorMouseLockSession();
+    void End_EditorMouseLockSession();
+    void Set_MouseLockOverrideRect(const RECT& lockRectScreen);
+    void Clear_MouseLockOverrideRect();
+
+    void Set_InputBlocked(bool isBlocked);
+    const POINT& Get_MousePosition() const;
+    const POINT& Get_RawMousePosition() const;
+    void Set_MousePositionOverride(const POINT& mousePosition);
+    void Clear_MousePositionOverride();
+
+public: /* For.Light_Manager */
+    const LIGHT_DESC* Get_LightDesc(uint32 index);
+    const LIGHT_DESC* Get_PrimaryShadowLightDesc() const;
+    uint32 Get_LightCount() const;
+    HRESULT Add_Light(const LIGHT_DESC& lightDesc);
+    HRESULT Update_PrimaryShadowLightDesc(const LIGHT_DESC& lightDesc);
+    HRESULT Render_Lights(const Shared<ShaderCom>& shader, const Shared<VIBuffer_Rect>& viBuffer);
+    void Clear_Lights();
+    void Get_LightDescs(vector<LIGHT_DESC>& outLightDescs) const;
+    HRESULT Set_Lights(const vector<LIGHT_DESC>& lightDescs);
+    HRESULT Bind_PrimaryShadowLightCB(const Shared<ShaderCom>& shader) const;
+    const LIGHT_DESC* Get_PointLightDesc(uint32 pointIndex) const;
+    uint32 Get_PointLightCount() const;
+    HRESULT Add_PointLight(
+        const Vec3& position,
+        float range,
+        const Vec4& diffuse,
+        const Vec4& ambient,
+        const Vec4& specular,
+        float attenuationPower = 1.f);
+    HRESULT Update_PointLightDesc(uint32 pointIndex, const LIGHT_DESC& lightDesc);
+    HRESULT Set_PointLightPosition(uint32 pointIndex, const Vec3& position);
+    HRESULT Set_PointLightRange(uint32 pointIndex, float range);
+    HRESULT Set_PointLightAlpha(uint32 pointIndex, float alpha);
+    HRESULT Set_PointLightAttenuationPower(uint32 pointIndex, float attenuationPower);
+
+public: /* For.Font_Manager */
+    HRESULT Add_Font(const wstring& fontTag, const wchar_t* fontFilePath);
+    bool Has_Font(const wstring& fontTag) const;
+    Vec2 Measure_Font(const wstring& fontTag, const wchar_t* text);
+    void Draw_Font(
+        const wstring& fontTag,
+        const wchar_t* text,
+        const Vec2& position,
+        FXMVECTOR color = XMVectorSet(1.f, 1.f, 1.f, 1.f),
+        float rotationRadians = 0.f,
+        const Vec2& pivot = Vec2(0.f, 0.f),
+        float scale = 1.f);
+
+public: /* For.Asset_Manager */
+    HRESULT Initialize_AssetManager(const wstring& resourceRoot, bool forceScan = false, const wstring& missingMetaRoot = {});
+    HRESULT Commit_AssetDeltaScan(const AssetDeltaScanResult& scanResult, const wstring& missingMetaRoot = {});
+    HRESULT Refresh_AssetRegistryDirectory(const wstring& directory, const wstring& missingMetaRoot = {});
+
+    string Find_AssetGUID(const wstring& filePath) const;
+
+    const AssetMeta* Find_AssetByGUID(const string& guid) const;
+    vector<AssetMeta> Get_AssetsByType(const string& type) const;
+
+    wstring Resolve_AssetPath(const string& guid) const;
+    wstring Get_AssetRoot() const;
+
+    string Ensure_AssetGUID(const wstring& filePath, const string& type = "") const;
+
+    const Asset_Manager* Get_AssetManager() const { return _assetManager.get(); }
+    Asset_Manager* Get_AssetManager() { return _assetManager.get(); }
+
+public: /* For.Sound_Manager */
+    bool Play_Sound(const wstring& soundFile, SoundChannel channel, float volume = 1.f);
+    bool Play_Sound_WithSpeed(const wstring& soundFile, SoundChannel channel, float volume, float speed);
+    bool Play_BGM(
+        const wstring& soundFile,
+        float volume = 1.f,
+        bool stopPrevBGM = true,
+        float fadeOutDuration = 0.f);
+    bool Play_BGMIntroThenLoop(
+        const wstring& introFile,
+        const wstring& loopFile,
+        float volume = 1.f,
+        bool stopPrevBGM = true,
+        float fadeOutDuration = 0.f);
+    bool Play_LoopSound(
+        const wstring& soundFile,
+        SoundChannel channel,
+        float volume = 1.f,
+        bool stopPrevChannel = false,
+        float fadeOutDuration = 0.f);
+    void Stop_SoundChannel(SoundChannel channel, float fadeOutDuration = 0.f);
+    void Stop_Sound(const wstring& soundFile);
+    void Stop_AllSounds(float fadeOutDuration = 0.f);
+    void Set_SoundChannelVolume(SoundChannel channel, float volume);
+    float Get_SoundChannelVolume(SoundChannel channel) const;
+    void Set_SoundChannelPaused(SoundChannel channel, bool paused);
+    void Set_AllSoundMuted(bool muted);
+    bool Is_AllSoundMuted() const;
+    void Set_SoundGlobalPitch(float pitch, bool includeBGM = false);
+    bool Has_Sound(const wstring& soundFile) const;
+    const wstring& Get_CurrentBGM() const;
+
+    bool Play_SoundCue(const wstring& cueId, const Vec3* worldPosition = nullptr);
+    bool Play_SoundCue(const wstring& cueId, const Vec3* worldPosition, float volume, float speed, float startRatio = 0.f);
+    bool Try_GetSoundCueDefaultVolumeSpeed(const wstring& cueId, float& outVolume, float& outSpeed) const;
+    HRESULT Reload_SoundCues();
+    void Update_SoundListenerFromActiveCamera();
+
+public: /* For.Debug Profile */
+    bool Build_DebugResourceMemorySummary(DebugResourceMemorySummary& outSummary) const;
+
+#if ENGINE_ENABLE_RELEASE_UPDATE_PROFILE
+    // 수동 Release Update 계측 window의 수집을 시작하거나 중지한다.
+    void Set_ReleaseUpdateProfileCaptureEnabled(bool enabled);
+    bool Is_ReleaseUpdateProfileCaptureEnabled() const;
+    // 현재 수동 Release Update 계측 window를 비운다.
+    void Reset_ReleaseUpdateProfileCapture();
+    // 현재 수동 Release Update 계측 window의 평균과 최대 시간을 파일 로그에 남긴다.
+    void Log_ReleaseUpdateProfileSummary();
+#endif
+
+public:
+    uint32 Get_Handle(const string& name) const;
+    ID3D11ShaderResourceView* Get_SRV(uint32 handle) const;
+    ID3D11ShaderResourceView* Get_SRV(const string& name) const;
+
+    HRESULT Bind_ByHandle(ShaderCom* shader, const char* shaderVariableName, uint32 handle) const;
+    HRESULT Bind_ByName(ShaderCom* shader, const char* shaderVariableName, const string& name) const;
+
+public:
+    HRESULT Add_Camera(const Shared<Camera>& camera) const;
+    bool Is_ActiveCamera(const Shared<Camera>& camera);
+    void Change_ActiveCamera(const Shared<Camera>& camera) const;
+    void SwitchTo_NextCamera();
+
+    bool Activate_CameraByType(ObjectType objectType);
+    bool Is_ActiveCameraType(ObjectType objectType) const;
+    bool Focus_FreeCameraOnPosition(const Vec3& position);
+
+    void Set_FreeCameraTimeDelta(float timeDelta) { _freeCameraTimeDelta = timeDelta; }
+    float Get_FreeCameraTimeDelta() const { return _freeCameraTimeDelta; }
+
+    Shared<Camera> Get_Camera(int index) const;
+    Shared<Camera> Get_ActiveCamera();
+    int Get_CameraCount();
+    Shared<Camera> Get_CameraByType(ObjectType objectType);
+
+    HRESULT Bind_CameraFar(const Shared<ShaderCom>& shader, const char* constantName);
+
+public:
+    const TypeRegistry::ComponentTypeInfo* Find_ComponentType(const string& className) const;
+    const TypeRegistry::GameObjectTypeInfo* Find_GameObjectType(const string& className) const;
+    const TypeRegistry::BTNodeTypeInfo* Find_BTNodeType(const string& className) const;
+    const TypeRegistry::AnimNotifyTypeInfo* Find_AnimNotifyType(const string& className) const;
+    const TypeRegistry::AnimNotifyStateTypeInfo* Find_AnimNotifyStateType(const string& className) const;
+    const TypeRegistry::ScreenFxTypeInfo* Find_ScreenFxType(const string& className) const;
+
+    void Visit_GameObjectTypes(const function<void(const TypeRegistry::GameObjectTypeInfo&)>& visitor) const;
+    void Visit_AnimNotifyTypes(const function<void(const TypeRegistry::AnimNotifyTypeInfo&)>& visitor) const;
+    void Visit_AnimNotifyStateTypes(const function<void(const TypeRegistry::AnimNotifyStateTypeInfo&)>& visitor) const;
+    void Visit_GlobalEnums(const function<void(const TypeRegistry::GlobalEnumInfo&)>& visitor) const;
+    void Visit_ScreenFxTypes(const function<void(const TypeRegistry::ScreenFxTypeInfo&)>& visitor) const;
+
+    Shared<Component> Create_ComponentPrototype(const string& className) const;
+    Shared<GameObject> Create_GameObjectPrototype(const string& className) const;
+    Shared<Base> Create_BTNodePrototype(const string& className) const;
+    Shared<AnimNotify> Create_AnimNotifyPrototype(const string& className) const;
+    Shared<AnimNotifyState> Create_AnimNotifyStatePrototype(const string& className) const;
+    Shared<ScreenFx_Instance> Create_ScreenFxInstance(const string& className) const;
+
+public :
+    HRESULT Ready_AllRenderTargets();
+    HRESULT Add_RenderTarget(
+        const wstring& targetTag,
+        uint32 sizeX,
+        uint32 sizeY,
+        DXGI_FORMAT pixelFormat,
+        const Color& clearColor,
+        bool resizeWithViewport = true,
+        bool useDSV = false,
+        uint32 arraySize = 1);
+    HRESULT Add_MRT(const wstring& mrtTag, const wstring& targetTag);
+
+    HRESULT Begin_MRT(const wstring& mrtTag, bool useDSV = false, bool clearRTV = true, uint32 arraySlice = 0);
+    HRESULT End_MRT();
+    HRESULT Resize_MRTs(uint32 width, uint32 height);
+    HRESULT Bind_RT_ShaderResource(const Shared<ShaderCom>& shader, const char* constantName, const wstring& targetTag);
+    ID3D11ShaderResourceView* Get_RT_SRV(const wstring& targetTag);
+
+    HRESULT Copy_CurrentRTV_To(const wstring& targetTag);
+    HRESULT Copy_RTV(const wstring& srcTargetTag, const wstring& dstTargetTag);
+    HRESULT Copy_RTV_ArraySlice(const wstring& srcTargetTag, uint32 arraySlice, const wstring& dstTargetTag);
+
+    HRESULT Copy_RT_Resource(const wstring& targetTag, ID3D11Texture2D* destTexture);
+    HRESULT Bind_PlayerStencilWriteState(bool depthWrite);
+    HRESULT Bind_ScreenFxExclusionStencilWriteState(bool depthWrite);
+    HRESULT Bind_BackgroundUIBehindPlayerStencilState();
+    HRESULT Bind_UINoDepthStencilState();
+
+#ifdef _DEBUG
+    ComPtr<ID3D11Texture2D> Get_RT_Texture(const wstring& targetTag);
+    HRESULT Initialize_Debug(float sizeX, float sizeY);
+    HRESULT Resize_DrawArea(float sizeX, float sizeY);
+    HRESULT Display_RT(const wstring& targetTag, bool render);
+    HRESULT Display_AllRTs(bool render);
+    HRESULT Render_RT_Debug(const Shared<VIBuffer_Rect>& viBuffer, const Shared<ShaderCom>& shader);
+    const map<wstring, bool>& Get_RTs() const;
+    void Set_ShadowCascadeSliceDebugEnabled(bool enabled);
+    bool Is_ShadowCascadeSliceDebugEnabled() const;
+    void Set_ShadowCascadeProjectionDebugEnabled(bool enabled);
+    bool Is_ShadowCascadeProjectionDebugEnabled() const;
+    void Set_ShadowCascadeInfluenceDebugEnabled(bool enabled);
+    bool Is_ShadowCascadeInfluenceDebugEnabled() const;
+#endif
+
+public:
+    HRESULT Bind_ShadowMatrices(const Shared<ShaderCom>& shader, const char* viewName, const char* projName);
+    HRESULT Bind_ShadowLightDesc(const Shared<ShaderCom>& shader, const char* lightFarName, const char* biasName = nullptr, const char* intensityName = nullptr);
+    HRESULT Bind_ShadowCB(const Shared<ShaderCom>& shader);
+    HRESULT Get_ShadowCBSnapshot(ShadowCB& outShadowCB) const;
+    HRESULT Set_ActiveShadowCascade(uint32 cascadeIndex);
+    HRESULT Commit_RenderedShadowCascade(uint32 cascadeIndex);
+    bool Consume_ForceRenderAllShadowCascades();
+    void Set_ShadowEnabled(bool enabled);
+    void Set_DynamicShadowCascadeTemporalUpdateEnabled(bool enabled);
+    bool Is_DynamicShadowCascadeTemporalUpdateEnabled() const;
+    void Set_DynamicShadowCascadeTemporalUpdateIntervals(uint32 cascade0, uint32 cascade1, uint32 cascade2, uint32 cascade3);
+    void Reset_DynamicShadowCascadeTemporalUpdateIntervals();
+    uint32 Get_ShadowCascadeCount() const;
+    HRESULT Set_ShadowCascadeLevel(CascadeLevel level);
+    CascadeLevel Get_ShadowCascadeLevel() const;
+    HRESULT Set_ShadowCascadePresets(const ShadowCascadePresetSet& presets);
+    const ShadowCascadePresetSet* Get_ShadowCascadePresets() const;
+    uint32 Get_ActiveShadowCascade() const;
+    const ShadowCascadeInfluenceVolume* Get_CascadeInfluenceVolumes() const;
+
+    HRESULT Update_ShadowLight(const ShadowLightDesc& desc);
+    const ShadowLightDesc* Get_ShadowLightDesc() const;
+    const Matrix* Get_ShadowTransformMatrix(D3DTS eType) const;
+    const ShadowCascadeDebugInfo* Get_ShadowCascadeDebugInfos() const;
+    bool Is_Visible_In_ShadowInfluenceVolume(const BoundingBox& worldAABB, uint32 cascadeIndex) const;
+    bool Is_Visible_In_ShadowSpace(const BoundingBox& worldAABB, const Matrix& viewProj) const;
+
+    HRESULT Update_ShadowFromCameraFrustum(
+        const ShadowLightDesc& desc,
+        const Shared<Camera>& camera,
+        const Vec3& lightDir);
+
+    void Push_BakeShadowTransform(const Matrix& view, const Matrix& proj);
+    bool Is_BakingInstancedShadow() const { return _bakeShadowOverrideActive; }
+    void Pop_BakeShadowTransform();
+    void Set_UseInstancedShadowCache(bool enabled);
+    bool Is_UseInstancedShadowCache() const;
+    void Request_BakeCachedInstancedShadow();
+    bool Has_InstancedShadowCache() const;
+    const Matrix& Get_CachedShadowViewProj() const;
+
+public:
+    void Add_Collider(const Shared<ColliderCom>& collider);
+    void Add_Collider(const Shared<ColliderCom>& collider, const Matrix& worldMatrix);
+    void Clear_Colliders();
+
+public:
+    PxPhysics* Get_PhysXPhysics() const;
+    PxScene* Get_PhysXScene() const;
+    PhysX_Manager* Get_PhysXManager() const { return _physxManager.get(); }
+    void Unregister_PhysXCollider(ColliderCom* collider);
+
+    PhysXStaticActorHandle Register_PhysXStaticCollision(
+        const StaticCollisionData& collisionData,
+        const Matrix& worldMatrix,
+        Collision_Preset preset);
+
+    void Unregister_PhysXStaticActor(PhysXStaticActorHandle handle);
+
+    bool Sweep_Collider(
+        ColliderCom* collider,
+        const Matrix& worldMatrix,
+        const Vec3& direction,
+        float distance,
+        PhysXQueryHit& outHit) const;
+
+    bool Sweep_Sphere(
+        const Vec3& origin,
+        const Vec3& direction,
+        float distance,
+        float radius,
+        Collision_Preset queryPreset,
+        PhysXQueryHit& outHit) const;
+
+    bool Raycast_Environment(
+        const Vec3& origin,
+        const Vec3& direction,
+        float distance,
+        PhysXQueryHit& outHit) const;
+
+    bool Probe_Ground(
+        ColliderCom* collider,
+        const Matrix& worldMatrix,
+        float probeDistance,
+        PhysXQueryHit& outHit) const;
+
+public:
+    void UpdateFrustum(const Matrix& view, const Matrix& proj);
+    bool IsVisible(const BoundingBox& worldAABB) const;
+    bool IsVisible(const BoundingBox& worldAABB, const Matrix& view, const Matrix& proj) const;
+    void BuildOctree(const vector<BoundingBox>& worldAABBs);
+    void QueryVisible(vector<uint32>& outIndices) const;
+    void CollectOctreeDebugBoxes(vector<BoundingBox>& outBoxes) const;
+
+public:
+    void Visit_BTNodeTypes(const function<void(const TypeRegistry::BTNodeTypeInfo&)>& visitor) const;
+
+public:
+    void Draw_DebugBox(const DebugBoxDesc& desc);
+    void Draw_DebugSphere(const DebugSphereDesc& desc);
+    void Draw_DebugCapsule(const DebugCapsuleDesc& desc);
+    void Draw_DebugLine(const DebugLineDesc& desc);
+    void Draw_DebugTraceLine(const DebugTraceLineDesc& desc);
+
+    void Clear_DebugDraws();
+    void Set_DebugRenderEnabled(bool enabled);
+
+    bool Is_DebugRenderEnabled() const;
+
+    HRESULT Render_DebugDepth();
+    HRESULT Render_DebugOverlay();
+
+public:
+    template <typename... Args>
+    void Print(std::wstring_view format, Args&&... args)
+    {
+#ifdef _DEBUG
+        if (!_printManager)
+            return;
+
+        _printManager->Print(format, std::forward<Args>(args)...);
+#endif
+    }
+
+    void Clear_Prints();
+    void Clear_Print(const wstring& slot);
+
+public:
+    void Set_PlayerInputBlocked(bool isBlocked) { _isPlayerInputBlocked = isBlocked; }
+    bool Is_PlayerInputBlocked() const { return _isPlayerInputBlocked; }
+
+    void Set_FreeCameraInputEnabled(bool enabled) { _isFreeCameraInputEnabled = enabled; }
+    bool Is_FreeCameraInputEnabled() const { return _isFreeCameraInputEnabled; }
+
+    void Set_GameplayInputMode(GameplayInputMode mode) { _gameplayInputMode = mode; }
+    GameplayInputMode Get_GameplayInputMode() const { return _gameplayInputMode; }
+    bool Is_WorldGameplayInputBlocked() const;
+    bool Is_UIInputEnabled() const;
+
+public:
+    HRESULT Save_GameObjectJson(const fs::path& path, const Shared<GameObject>& gameObject);
+    json Load_JsonFile(const fs::path& path) const;
+    HRESULT Load_GameObjectJson(const fs::path& path, const Shared<GameObject>& gameObject) const;
+    Shared<GameObject> Instantiate_GameObjectJson(const json& root);
+    Shared<GameObject> Instantiate_GameObjectJson(const fs::path& path);
+    HRESULT Create_PrefabAsset(const fs::path& path, const string& staticClass, const string& prefabName);
+
+public:
+    HRESULT Update_Picking();
+    bool Pick_WorldPosition(const POINT& pixelPos, Vec3& outWorldPos);
+
+public:
+    bool Enqueue_ThreadJob(function<void()> job);
+    size_t Get_PendingThreadJobCount() const;
+
+public:
+    DelegateHub& Get_DelegateHub() { return _delegateHub; }
+    const DelegateHub& Get_DelegateHub() const { return _delegateHub; }
+
+public:
+    Event_Bus& Get_EventBus() { return *_eventBus; }
+
+public:
+    void Play_ScreenFx(const Shared<class ScreenFx_Instance>& screenFX) const;
+    ScreenFxHandle Play_ScreenFx_WithHandle(const Shared<class ScreenFx_Instance>& screenFX) const;
+    void Stop_ScreenFx(ScreenFxHandle handle) const;
+    ScreenFxHandle Play_PreviewScreenFx_WithHandle(const Shared<class ScreenFx_Instance>& screenFX) const;
+    void Evaluate_PreviewScreenFx(ScreenFxHandle handle, float elapsedTime) const;
+    void Stop_PreviewScreenFx(ScreenFxHandle handle) const;
+    bool Is_ScreenFxFinished(const wstring& tag) const;
+
+public :
+    bool Is_EnableWorldRendering() const { return _enableWorldRendering; }
+    void Enable_WorldRendering(bool enable) { _enableWorldRendering = enable; }
+
+private:
+    Unique<Log_Manager> _logManager{};
+    Unique<Graphic_Device> _graphicDevice{};
+    Unique<Timer_Manager> _timerManager{};
+    Unique<Level_Manager> _levelManager{};
+    Unique<Prototype_Manager> _prototypeManager{};
+    Unique<UI_Manager> _uiManager{};
+    Unique<Object_Manager> _objectManager{};
+    Unique<Environment_Manager> _environmentManager{};
+    Unique<Renderer> _renderer{};
+    Unique<ScreenFx_Manager> _screenFxManager{};
+    Unique<ShaderCom_Controller> _shaderComController{};
+    Unique<PipeLine> _pipeLine{};
+    Unique<Input_Manager> _inputManager{};
+    Unique<Light_Manager> _lightManager{};
+    Unique<Font_Manager> _fontManager{};
+    Unique<Asset_Manager> _assetManager{};
+    Unique<Sound_Manager> _soundManager{};
+    Unique<ShaderResourceRegistry> _shaderResourceRegistry{};
+    Unique<Camera_Manager> _cameraManager{};
+    Unique<TypeRegistry> _typeRegistry{};
+    Unique<Target_Manager> _targetManager{};
+    Unique<Debug_Manager> _debugManager{};
+    Unique<Collision_Manager> _collisionManager{};
+    Unique<Shadow> _shadow{};
+    Unique<PhysX_Manager> _physxManager{};
+    Unique<Picking> _picking{};
+    Unique<Culling_Manager> _cullingManager{};
+    Unique<ThreadPool> _threadPool{};
+    Unique<Event_Bus> _eventBus{};
+    bool _enableEditorRuntimeDebug = false;
+
+#ifdef _DEBUG
+    Unique<Print_Manager> _printManager{};
+    bool _shadowCascadeSliceDebugEnabled = false;
+    bool _shadowCascadeProjectionDebugEnabled = false;
+    bool _shadowCascadeInfluenceDebugEnabled = false;
+    bool _hasShadowCascadeDebugSnapshot = false;
+    ShadowCascadeDebugInfo _shadowCascadeDebugSnapshot[Shadow::CascadeCount]{};
+    Matrix _shadowCascadeViewSnapshot[Shadow::CascadeCount]{};
+#endif
+
+private:
+    ComPtr<Device> _device = {};
+    ComPtr<Context> _context = {};
+    ComPtr<ID3D11DepthStencilState> _playerStencilWriteState = {};
+    ComPtr<ID3D11DepthStencilState> _playerStencilWriteDepthReadState = {};
+    ComPtr<ID3D11DepthStencilState> _screenFxExclusionStencilWriteState = {};
+    ComPtr<ID3D11DepthStencilState> _screenFxExclusionStencilWriteDepthReadState = {};
+    ComPtr<ID3D11DepthStencilState> _backgroundUIBehindPlayerStencilState = {};
+    ComPtr<ID3D11DepthStencilState> _uiNoDepthStencilState = {};
+
+    uint32 _viewportWidth{ 0 };
+    uint32 _viewportHeight{ 0 };
+
+    bool _isPlayerInputBlocked = false;
+    bool _isFreeCameraInputEnabled = false;
+
+    bool _bakeShadowOverrideActive = false;
+    Matrix _bakeShadowViewOverride = {};
+    Matrix _bakeShadowProjOverride = {};
+
+    bool _isGameplayPaused = false;
+    GameplayInputMode _gameplayInputMode = GameplayInputMode::Normal;
+
+    float _worldTimeScale = 1.f;
+    float _unscaledTimeDelta = 0.f;
+
+    bool _enableWorldRendering = false;
+
+#ifdef _DEBUG
+private:
+    void Draw_ShadowCascadeWorldDebug();
+    void Capture_ShadowCascadeDebugSnapshot();
+#endif
+    float _worldTimeDelta = 0.f;
+    bool _isWorldTimeSlowActive = false;
+    float _worldTimeSlowElapsed = 0.f;
+    float _worldTimeSlowDuration = 0.f;
+    float _worldTimeScaleBeforeSlow = 1.f;
+
+    float _freeCameraTimeDelta = 0.f;
+
+    DelegateHub _delegateHub = {};
+
+#if defined(_DEBUG) || ENGINE_ENABLE_RELEASE_UPDATE_PROFILE
+
+private: //## Static::DebugPerformance
+#ifdef _DEBUG
+    static constexpr float runtimePerfSampleWindowSec{ DebugPerf::kRuntimePerfLogWindowSec };
+#endif
+
+private: //## Data::UpdatePerformance
+    chrono::steady_clock::time_point _runtimePerfWindowStartTime{};
+    chrono::steady_clock::time_point _runtimePerfLastSampleTime{};
+    bool _hasRuntimePerfWindowStartTime{ false };
+    bool _hasRuntimePerfLastSampleTime{ false };
+    uint32 _runtimePerfObservedFrameCount{ 0 };
+
+#if ENGINE_ENABLE_RELEASE_UPDATE_PROFILE
+    bool _releaseUpdateProfileCaptureEnabled{ false };
+#endif
+
+    UpdatePerfWindow _updatePerfWindow{};
+
+private: //## Helper::UpdatePerformance
+    void Accumulate_UpdatePerf(
+        double updateMs,
+        double debugMgrMs,
+        double inputMgrMs,
+        double printMgrMs,
+        double clientMs,
+        double levelMs,
+        double priorityObjMs,
+        double pipelineMs,
+        double objMs,
+        double physxBeginMs,
+        double collClearMs,
+        double lateObjMs,
+        double physxUpdateMs,
+        double physxGatherMs,
+        double collFromPhysxMs,
+        double cameraMs,
+        double uiMs);
+
+    bool Try_ConsumeUpdatePerfSummary(float windowSec, UpdatePerfSummary& outSummary);
+    bool Should_SampleRuntimePerf();
+    void Reset_RuntimePerfWindowState(chrono::steady_clock::time_point now);
+#ifdef _DEBUG
+    void Try_FlushRuntimePerfLog();
+#endif
+
+#endif
+
+#if defined(_DEBUG) || defined(_EDITOR)
+
+private: //## Data::RenderPerformance
+    RenderPerfSummary _lastDrawRenderPerf{};
+    float _lastGameDrawMs{ 0.f };
+    float _lastRendererDrawMs{ 0.f };
+    float _lastLevelRenderMs{ 0.f };
+    float _lastDebugRenderMs{ 0.f };
+    float _lastUiRenderMs{ 0.f };
+    float _lastPostDrawMs{ 0.f };
+    float _lastPrintMs{ 0.f };
+    float _lastPresentMs{ 0.f };
+    float _lastRuntimeFrameDeltaMs{ 0.f };
+    float _lastEngineUpdateMs{ 0.f };
+    float _lastClientUpdateMs{ 0.f };
+    float _lastLevelUpdateMs{ 0.f };
+    float _lastPriorityObjectUpdateMs{ 0.f };
+    float _lastObjectUpdateMs{ 0.f };
+    float _lastLateObjectUpdateMs{ 0.f };
+    float _lastPhysXUpdateMs{ 0.f };
+    float _lastCollisionFromPhysXMs{ 0.f };
+    float _lastCameraUpdateMs{ 0.f };
+    float _lastUiUpdateMs{ 0.f };
+    chrono::steady_clock::time_point _lastRuntimeFrameDropLogTime{};
+
+private: //## Behavior::FrameDropLogging
+    void Log_RuntimeFrameDropIfNeeded(float presentMs);
+#endif
+
+public:
+    void Release_Engine();
+    void Free() override;
+};
+
+NS_END

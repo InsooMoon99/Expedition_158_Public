@@ -1,0 +1,152 @@
+﻿#include "BackGround.h"
+#include "GameInstance.h"
+
+IMPLEMENT_REFLECTION(BackGround)
+{
+    auto& info = GetStaticReflectionInfo();
+    info.properties.clear();
+
+    info.displayName = "BackGround";
+    info.category = "UI";
+
+    return true;
+}
+
+BackGround::BackGround(const ComPtr<Device>& device, const ComPtr<Context>& context)
+    : UIObject{ device, context }
+{
+}
+
+BackGround::BackGround(const BackGround& prototype)
+    : UIObject{ prototype }
+
+{
+}
+
+HRESULT BackGround::Initialize_Prototype()
+{
+    return S_OK;
+}
+
+HRESULT BackGround::Initialize(void* arg)
+{
+    BACKGROUND_DESC Desc{};
+
+    Desc.degreePerSec = 90.f;
+    Desc.speedPerSec = 1.f;
+    Desc.x = 100.f;
+    Desc.y = 100.f;
+    Desc.sizeX = 200.f;
+    Desc.sizeY = 200.f;
+
+    if (FAILED(__super::Initialize(&Desc)))
+    {
+        MSG_BOX("BackGround : __super::Initialize Failed");
+        return E_FAIL;
+    }
+
+    if (FAILED(Ready_Components()))
+    {
+        MSG_BOX("BackGround : Ready_Components Failed");
+        return E_FAIL;
+    }
+
+    return S_OK;
+}
+
+void BackGround::Priority_Update(float timeDelta)
+{
+    int a = 10;
+}
+
+void BackGround::Update(float timeDelta)
+{
+    _positionX += 10.f * timeDelta;
+
+    __super::Update_Transform();
+}
+
+void BackGround::Late_Update(float timeDelta)
+{
+    GAME->Add_RenderGroup(RenderGroup::UI, GetSharedPtr<GameObject>());
+}
+
+HRESULT BackGround::Render()
+{
+    if (FAILED(_transformCom->Bind_ShaderResource(_shader.get(), "g_WorldMatrix")))
+        return E_FAIL;
+
+    if (FAILED(__super::Bind_ShaderResource(_shader.get(), "g_ViewMatrix", D3DTS::View)))
+        return E_FAIL;
+
+    if (FAILED(__super::Bind_ShaderResource(_shader.get(), "g_ProjMatrix", D3DTS::Proj)))
+        return E_FAIL;
+
+    if (FAILED(_texture->Bind_ShaderResourceView(_shader.get(), "g_Texture", 0)))
+        return E_FAIL;
+
+    if (FAILED(_shader->Begin(0)))
+        return E_FAIL;
+
+    if (FAILED(_vibuffer->Bind_Resources()))
+        return E_FAIL;
+
+    if (FAILED(_vibuffer->Render()))
+        return E_FAIL;
+
+    return S_OK;
+}
+
+HRESULT BackGround::Ready_Components()
+{
+    if (FAILED(Add_Component(ETOI(LevelType::MainTitle), TEXT("Texture_BackGround"), _texture)))
+    {
+        MSG_BOX("BackGround : Texture_BackGround Failed");
+        return E_FAIL;
+    }
+
+    if (FAILED(Add_Component(ETOI(LevelType::Static), TEXT("Shader_VtxTex"), _shader)))
+    {
+        MSG_BOX("BackGround : Shader_VtxTex Failed");
+        return E_FAIL;
+    }
+
+    if (FAILED(Add_Component(ETOI(LevelType::Static), TEXT("VIBuffer_Rect"), _vibuffer)))
+    {
+        MSG_BOX("BackGround : VIBuffer_Rect Failed");
+        return E_FAIL;
+    }
+
+    return S_OK;
+
+    return S_OK;
+}
+
+Shared<BackGround> BackGround::Create(const ComPtr<Device>& device, const ComPtr<Context>& context)
+{
+    auto pInstance = make_shared<BackGround>(device, context);
+
+    if (FAILED(pInstance->Initialize_Prototype()))
+    {
+        MSG_BOX("Failed to Created : BackGround");
+        return nullptr;
+    }
+    return pInstance;
+}
+
+Shared<GameObject> BackGround::Clone(void* arg)
+{
+    auto pInstance = make_shared<BackGround>(*this);
+
+    if (FAILED(pInstance->Initialize(arg)))
+    {
+        MSG_BOX("Failed to Cloned : BackGround");
+        return nullptr;
+    }
+    return pInstance;
+}
+
+void BackGround::Free()
+{
+    __super::Free();
+}

@@ -1,0 +1,35 @@
+﻿#pragma once
+
+#include "Base.h"
+
+NS_BEGIN(Engine)
+
+class ShaderCom;
+class VIBuffer_Rect;
+
+class Light final : public Base
+{
+public:
+	Light();
+	virtual ~Light() = default;
+
+public:
+	const LIGHT_DESC* Get_LightDesc() const {
+		return &_desc;
+	}
+    HRESULT Bind_LightCB(const Shared<ShaderCom>& shader);
+
+public:
+	HRESULT Initialize(const LIGHT_DESC& lightDesc);
+    HRESULT Update_Desc(const LIGHT_DESC& lightDesc);
+    HRESULT Render(const Shared<ShaderCom>& shader, const Shared<VIBuffer_Rect>& viBuffer);
+
+private:
+	LIGHT_DESC					_desc{};
+
+public:
+	static Shared<Light> Create(const LIGHT_DESC& lightDesc);
+	virtual void Free() override;
+};
+
+NS_END
